@@ -1,0 +1,116 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+#%%
+
+def m(S1, S2, T_star):
+    k = 23e17
+    alpha = 1.7e-4
+    beta = 0.8e-3
+    m = k*(beta*(S2 - S1) - alpha*T_star)
+#     if m_ >= 0: # their m+
+#         m = m_/(1 - np.exp(-10*m_/(1e6)*(3600*24*365)))
+#     else: # their m-
+#         m = -m_/(1 - np.exp(10*m_/(1e6)*(3600*24*365)))
+    return m
+
+def f(S1, S2, F1):
+    F1 = F1*(1e6)*(3600*24*365) # convert F1 from 10^6 m^3/s to m^3/year
+    S_0 = 35
+    T_star = -2
+    V = 10**17
+    if m(S1, S2, T_star) >= 0:
+        f = (S_0*F1 + m(S1, S2, T_star)*(S2 - S1))/V
+    else:
+        f = (S_0*F1 + m(S1, S2, T_star)*(2*S1 + S2 - 3*S_0))/V
+    return f
+
+def g(S1, S2, F2):
+    F2 = F2*(1e6)*(3600*24*365) # convert F1 from 10^6 m^3/s to m^3/year
+    S_0 = 35
+    T_star = -2
+    V = 10**17
+    if m(S1, S2, T_star) >= 0:
+        g = (-S_0*F2 + m(S1, S2, T_star)*(3*S_0 - S1 - 2*S2))/V
+    else:
+        g = (-S_0*F2 + m(S1, S2, T_star)*(S2 - S1))/V
+    return g
+
+def RK4_R82(t_max, n, F1, F2, S1_0, S2_0):
+    t_step = t_max/n
+    t = np.arange(0, t_max, t_step)
+    S1 = np.zeros(int(n))
+    S2 = np.zeros(int(n))
+    [S1[0], S2[0]] = [S1_0, S2_0]
+    
+    for i in range(len(t) - 1):
+        f1 = f(S1[i], S2[i], F1)
+        g1 = g(S1[i], S2[i], F2)
+        
+        f2 = f(S1[i] + f1*t_step/2, S2[i] + f1*t_step/2, F1)
+        g2 = g(S1[i] + f1*t_step/2, S2[i] + f1*t_step/2, F2)
+        
+        f3 = f(S1[i] + f2*t_step/2, S2[i] + f2*t_step/2, F1)
+        g3 = g(S1[i] + f2*t_step/2, S2[i] + f2*t_step/2, F2)
+        
+        f4 = f(S1[i] + f3*t_step, S2[i] + f3*t_step, F1)
+        g4 = g(S1[i] + f3*t_step, S2[i] + f3*t_step, F2)
+
+        S1[i + 1] = S1[i] + t_step*(1/6)*(f1 + 2*f2 + 2*f3 + f4)
+        S2[i + 1] = S2[i] + t_step*(1/6)*(g1 + 2*g2 + 2*g3 + g4)
+        
+    return t, S1, S2
+    
+#%% 
+
+# Solve using RK4
+
+[t, S1, S2] = RK4_R82(1000, 10000, 0.5, 0.2, 34, 36)
+#plt.plot((3*S_0 - S1 - 2*S2), (3*S_0 - 2*S1 - S2))
+plt.plot(t, S1)
+plt.plot(t, S2)
+
+#%%
+
+# This is the analytic plot for the TB point
+
+k = 23e17
+alpha = 1.7e-4
+beta = 0.8e-3
+S_0 = 35 # reference salinity
+T_star = -2
+
+F1_SNB = (k*alpha**2/(4*beta*S_0))*(T_star)**2
+F1_SNB = F1_SNB/(1e6*365*24*3600) # This puts the whole thing into Sv
+
+def F1_subHB(F2):
+    
+    F2 = F2*(1e6*365*24*3600)
+    def C(F2):
+        C = (3/32)*((alpha**2)/beta)*k*T_star**2 - (1/4)*S_0*F2
+        return C
+    
+    F1_subHB = C(F2)/S_0 + (1/S_0)*np.sqrt((C(F2)**2 + S_0*F2*((3*((alpha**2)/beta)*k*T_star**2 - S_0*F2)/(16))))
+    return F1_subHB/(1e6*365*24*3600)
+
+F2 = np.arange(0.151, 0.44, 0.000001)
+F1_subHB(F2)
+
+# Find the intersection here, this is the TB point
+
+
+plt.rcParams['figure.figsize'] = [12, 10]
+plt.plot(F2, F1_subHB(F2), lw = 2.5, linestyle='--', color = 'black', label = "subHB")
+plt.axhline(y=F1_SNB, lw = 2.5, color = 'black', label = "SNB")
+plt.plot(0.151, F1_SNB, 'x', color = "red", markersize = 20, mew=4)
+plt.xticks(np.arange(0.1, 0.5, 0.1), fontsize=25)
+plt.yticks(np.arange(0.06, 0.085, 0.005), fontsize=25)
+plt.xlim([0.1, 0.4])
+plt.ylim([0.06, 0.08])
+plt.xlabel("F2 (Sv)", fontsize = 25)
+plt.ylabel("F1 (Sv)", fontsize = 25)
+plt.text(0.15, 0.065, "Stable", fontsize = 25)
+plt.text(0.3, 0.072, "Unstable", fontsize = 25)
+plt.text(0.22, 0.0774, "Unstable", fontsize = 25)
+plt.legend(fontsize = 16)
+plt.show()
