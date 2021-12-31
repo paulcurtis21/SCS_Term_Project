@@ -1,0 +1,131 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+#%%
+
+# define the constants first.
+
+a = 0.184
+b = 0.774
+
+Ta = 0 # atmospheric temperature
+
+Ti = 15 # midlatitude box
+Si = 35
+
+Tb = 4 # sub surface, sub arctic 
+Sb = 34.5
+
+n_days = 1
+q = 0.01 # prescribed advective exchange
+alpha = 2*q # the latent heat release
+tau_c = 4*q # This is the convection time scale  
+
+#%%
+
+# Now define the model equations
+
+def RK4_S61DC(t_max, n, T_0, S_0, Fs):
+    t_step = t_max/n
+    t = np.arange(0, t_max, t_step)
+    T = np.zeros(int(n))
+    S = np.zeros(int(n))
+    rho_TS = np.zeros(int(n))
+    [T[0], S[0]] = [T_0, S_0]
+    
+    def rho(T, S):
+        rho_0 = 1.028e3 # reference density, T and S
+        T0 = 2
+        S0 = 34.5
+        rho = rho_0 - a*(T - T0) + b*(S - S0)
+        return rho
+    
+    rho_TS[0] = rho(T_0, S_0)
+    rho_b = rho(Tb, Sb)
+    
+    def f(T, S): # F dot
+        f = alpha*(Ta - T) + q*(Ti - T) + tau_c*(Tb - T)*np.heaviside(rho(T, S) - rho_b, 0)
+        return f
+    
+    def g(T, S, Fs): # T dot
+        g = Fs + q*(Si - S) + tau_c*(Sb - S)*np.heaviside(rho(T, S) - rho_b, 0)
+        return g
+    
+    for i in range(len(t) - 1):
+        f1 = f(T[i], S[i])
+        g1 = g(T[i], S[i], Fs)
+
+        f2 = f(T[i] + f1*t_step/2, S[i] + f1*t_step/2)
+        g2 = g(T[i] + f1*t_step/2, S[i] + f1*t_step/2, Fs)
+        
+        f3 = f(T[i] + f2*t_step/2, S[i] + f2*t_step/2)
+        g3 = g(T[i] + f2*t_step/2, S[i] + f2*t_step/2, Fs)
+        
+        f4 = f(T[i] + f3*t_step, S[i] + f3*t_step)
+        g4 = g(T[i] + f3*t_step, S[i] + f3*t_step, Fs)
+
+        T[i + 1] = T[i] + t_step*(1/6)*(f1 + 2*f2 + 2*f3 + f4)
+        S[i + 1] = S[i] + t_step*(1/6)*(g1 + 2*g2 + 2*g3 + g4)
+        
+        rho_TS[i + 1] = rho(T[i], S[i])
+        
+    return t, T, S, rho_TS, rho_b
+   
+#%%
+
+T_0 = 5
+S_0 = 35.5
+
+[t, T_1, S_1, rho_TS_1, rho_b_1] = RK4_S61DC(400, 100000, 5, 35.5, -0.03)
+[t, T_2, S_2, rho_TS_2, rho_b_2] = RK4_S61DC(400, 100000, 6, 34, -0.03)
+[t, T_3, S_3, rho_TS_3, rho_b_3] = RK4_S61DC(400, 100000, 5, 35.5, 0.01)
+[t, T_4, S_4, rho_TS_4, rho_b_4] = RK4_S61DC(400, 100000, 6, 34, 0.01)
+
+plt.rcParams['figure.figsize'] = [10, 10]
+plt.axhline(0, linestyle = '--', color = 'black')
+plt.plot(t, rho_TS_1 - rho_b_1, color = 'blue', linewidth = 4, label = "$\sigma_{0} > 0; F_{S} = -30mSv$")
+plt.plot(t, rho_TS_2 - rho_b_2, color = 'blue', ls = '--', linewidth = 4, label = "$\sigma_{0} < 0; F_{S} = -30mSv$")
+plt.plot(t, rho_TS_3 - rho_b_2, color = 'red', linewidth = 4, label = "$\sigma_{0} > 0; F_{S} = 10mSv$")
+plt.plot(t, rho_TS_4 - rho_b_4, color = 'red', ls = '--', linewidth = 4, label = "$\sigma_{0} < 0; F_{S} = 10mSv$")
+plt.xlim([0, 400])
+plt.ylim([-4, 2])
+plt.xlabel("Integration Time", fontsize = 25)
+plt.ylabel('Density Anomaly ($\sigma$; kgm$^{-3}$)', fontsize = 25)
+plt.xticks(np.arange(0, 500, 100), fontsize = 25)
+plt.yticks(np.arange(-4, 3, 1), fontsize = 25)
+plt.legend(fontsize = 18)
+plt.text(15, 1.3, 'a)', fontsize = 40, weight='bold')
+plt.show
+
+#%% 
+
+plt.rcParams['figure.figsize'] = [10, 10]
+plt.plot(T_1, S_1, color = 'blue', linewidth = 4, label = "$F_{S} = -30mSv$")
+plt.plot(T_2, S_2, color = 'blue', ls = '--', linewidth = 4, label = "$F_{S} = -30mSv$")
+plt.plot(T_3, S_3, color = 'red', linewidth = 4, label = "$F_{S} = 10mSv$")
+plt.plot(T_4, S_4, color = 'red', ls = '--', linewidth = 4, label = "$F_{S} = 10mSv$")
+
+#Initial Conditions
+plt.plot(5, 35.5, markersize = 16, mew = 4, marker = 'o', color = 'black')
+plt.plot(6, 34, markersize = 16, mew = 4, marker = 'o', color = 'black')
+
+# End Points
+plt.plot(5, 32, markersize = 20, mew = 4, marker = 'x', color = 'blue')
+plt.plot(4.42, 34.8, markersize = 20, mew = 4, marker = 'x', color = 'red')
+
+# Convection On
+#plt.plot(5.22, 34.8, markersize = 16, mew = 4, marker = 'd', color = 'black')
+
+# Convection Off
+#plt.plot(4.6, 34.63, markersize = 16, mew = 4, marker = 's', color = 'black')
+
+plt.xlim([4.25, 6.25])
+plt.ylim([31.5, 36])
+plt.xlabel("Temperature ($^{o}$C)", fontsize = 25)
+plt.ylabel("Salinity (psu)", fontsize = 25)
+plt.xticks(np.arange(4.5, 6.5, 0.5), fontsize = 25)
+plt.yticks(np.arange(31.5, 36, 1), fontsize = 25)
+plt.grid('--')
+#plt.legend(fontsize = 15)
+plt.text(4.35, 35.4, 'b)', fontsize = 40, weight='bold')
+plt.show
